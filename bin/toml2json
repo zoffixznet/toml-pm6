@@ -1,0 +1,9 @@
+#!/usr/bin/env perl6
+use lib <lib>;
+use TOML;
+use JSON::Tiny;
+
+my $*JSON_COMPAT = True;
+my $input = $*IN.slurp-rest.&from-toml
+    or die "Couldn't parse TOML";
+say to-json($input);

@@ -1,6 +1,6 @@
 use MONKEY_TYPING;
 augment class Grammar {
-    method call-rule ($regex_name, $class) {
+    method foreign-rule ($regex_name, $class) {
         my $cursor = $class.'!cursor_init'(self.orig(), :p(self.pos()));
         my $ret = $cursor."$regex_name"();
         self.MATCH.make: $ret.MATCH.ast;
@@ -23,6 +23,8 @@ grammar TOML::Grammar {
         { make $%top }
     }
 
+    token key { <:L+:N+[_-]>+ }
+
     rule keyvalue {
         <key> '=' <value>
         { make $<key>.Str => $<value>.ast }
@@ -34,7 +36,7 @@ grammar TOML::Grammar {
         {
             my %table;
             %table{.key} = .value for @<keyvalue>».ast;
-            make lol(|@<key>.map({.ast})) => %table;
+            make lol(|@<key>.map({.Str})) => %table;
         }
     }
 
@@ -44,26 +46,35 @@ grammar TOML::Grammar {
         {
             my %table;
             %table{.key} = .value for @<keyvalue>».ast;
-            make lol(|@<key>.map({.ast})) => %table;
+            make lol(|@<key>.map({.Str})) => %table;
         }
     }
 
     grammar Value {...}
-    token key {
-        <:L+:N+[_-]>+
-        { make ~$/ }
+
+    token value {
+        <val=.Value::value> { make $<val>.ast }
     }
 
     grammar Value {
         token ws { [\n|' '|\t|'#'\N*]* }
         rule value {
-            | <integer> { make $<digit>.ast  }
-            | <float>  { make $<float>.ast  }
-            | <array>  { make $<array>.ast  }
-            | <bool>   { make $<bool>.ast   }
-            | <datetime> { make $<datetime>.ast }
-            # XXX Ugly
-            | <string> { make $<string><call-rule>.ast }
+            [
+            | <integer>
+            | <float>
+            | <array>
+            | <bool>
+            | <datetime>
+            | <string>
+            ]
+            {
+                my ($k, $v) = %().kv;
+                if $*JSON_COMPAT {
+                    make { type => $k, value => $k eq 'datetime' ?? ~$v !! $v.ast };
+                } else {
+                    make $v.ast;
+                }
+            }
         }
 
         token integer { <[+-]>? \d+ { make +$/ } }
@@ -76,7 +87,20 @@ grammar TOML::Grammar {
             | true { make True }
             | false { make False }
         }
+
+        token datetime {
+            (\d**4) '-' (\d\d) '-' (\d\d)
+            T
+            (\d\d) ':' (\d\d) ':' (\d\d) Z
+            {
+                make DateTime.new: |%(
+                    <year month day hour minute second> Z=> map +*, @()
+                )
+            }
+        }
+
         proto token string { * }
+        # proto token string { {*} { make $<call-rule>.ast } }
 
         grammar String {
             token stopper { \' }
@@ -110,26 +134,26 @@ grammar TOML::Grammar {
         }
 
         token string:sym<'> {
-            <sym> ~ <sym> <call-rule: 'string', String>
+            <sym> ~ <sym> <foreign-rule: 'string', String>
+            { make $<foreign-rule>.ast }
         }
         token string:sym<'''> {
-            [<sym>\n?] ~ <sym> <call-rule: 'string', String but Multi>
+            [<sym>\n?] ~ <sym> <foreign-rule: 'string', state$= String but Multi>
+            { make $<foreign-rule>.ast }
         }
         token string:sym<"> {
             <sym> ~ <sym>
-            <call-rule: 'string', String but role :: does Escapes {
+            <foreign-rule: 'string', state$= String but role :: does Escapes {
                     token stopper { \" }
             }>
+            { make $<foreign-rule>.ast }
         }
         token string:sym<"""> {
             [<sym>\n?] ~ <sym>
-            <call-rule: 'string', String but role :: does Escapes does Multi {
+            <foreign-rule: 'string', state$= String but role :: does Escapes does Multi {
                 token stopper { '"""' }
             }>
+            { make $<foreign-rule>.ast }
         }
-    }
-
-    token value {
-        <val=.Value::value> { make $<val>.ast }
     }
 }
