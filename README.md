@@ -19,7 +19,7 @@ A WIP <200 line TOML decoder written in Perl 6.
 
 ### Testing
 
-Tests are currently done via (toml-test)[https://github.com/BurntSushi/toml-test].
+Tests are currently done via [toml-test](https://github.com/BurntSushi/toml-test).
 To test TOML.pm6, Go must be installed. Then, install toml-test via:
 
     cd
