@@ -115,8 +115,8 @@ grammar Value does ForeignGrammar {
         token escape:backslash { \\ {make '\\'}}
         token escape:stopper { <stopper> {make ~$/}}
         token hex { <[0..9A..F]> }
-        token escape:sym<u> { <sym> <hex>**4 {make chr :16[@<hex>]}}
-        token escape:sym<U> { <sym> <hex>**8 {make chr :16[@<hex>]}}
+        token escape:sym<u> { <sym> <hex>**4 {make chr :16(@<hex>.join)}}
+        token escape:sym<U> { <sym> <hex>**8 {make chr :16(@<hex>.join)}}
     }
 
     role Multi {
