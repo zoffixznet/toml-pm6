@@ -21,19 +21,22 @@ rule TOP {
     :my Bool %array_names;
     ^ \n *
     [[
-    | <keyvalue> { given @<keyvalue>[*-1].ast {
+    | <keyvalue>
+      { given @<keyvalue>[*-1].ast {
         die "Name {.key.join('.')} already in use." if %used_names{~.key}++;
         %top{.key} := .value;
-    } }
-    | <table> { given @<table>[*-1].ast {
+      } }
+    | <table>
+      { given @<table>[*-1].ast {
         die "Name {.key.join('.')} already in use." if %used_names{~.key}++;
         # Implicit declarations mean that %top{.key} might already be defined,
         # so we include that in the new hash
         %top{.key} := $%(%top{.key}.map({.pairs}), .value.pairs);
         # All of the new sub-keys are considered used in addition to .key
         for .value.keys { %used_names{.key~" $^subkey"}++ };
-    } }
-    | <table_array> { given @<table_array>[*-1].ast {
+      } }
+    | <table_array>
+      { given @<table_array>[*-1].ast {
         if not %array_names{~.key}++ {
             die "Name {.key.join('.')} is not a table-array."
                 if %used_names{~.key}++ or %top{.key,}.flat[0];
@@ -41,7 +44,7 @@ rule TOP {
         # Just pushing to an AoH will sometimes make a normal Array instead of
         # an AoH, so we just make a new AoH each time (for now)
         %top{.key} := AoH.new(|@(%top{.key,}.flat[0]), .value).item;
-    } }
+      } }
     ] \n * ]*
     [ $ || { die "Couldn't parse TOML: $/" } ]
     { make $%top }
