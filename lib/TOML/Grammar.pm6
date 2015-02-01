@@ -85,7 +85,7 @@ grammar Value does ForeignGrammar {
         {
             my ($k, $v) = %().kv;
             if $*JSON_COMPAT {
-                make { type => $k, value => $k eq 'datetime' ?? ~$v !! $v.ast };
+                make { type => $k, value => $k (elem) <datetime bool integer float> ?? ~$v !! $v.ast };
             } else {
                 make $v.ast;
             }
@@ -95,7 +95,7 @@ grammar Value does ForeignGrammar {
     token integer { <[+-]>? \d+ { make +$/ } }
     token float { <[+-]>? \d+ [\.\d+]? [<[Ee]> <integer>]? { make +$/ }}
     rule array {
-        \[ ~ \] <value> *% \,
+        \[ ~ \] <value> * %% \,
         { make my@ = @<value>».ast }
     }
     token bool {
@@ -124,7 +124,7 @@ grammar Value does ForeignGrammar {
 
     grammar String {
         token stopper { \' }
-        token string { <chars>+ {make @<chars>.map({.ast}).join}}
+        token string { <chars>* {make @<chars>.map({.ast}).join}}
         proto token chars { * }
         token chars:non-control { <-[\x00..\x1F\\]-stopper>+ {make ~$/}}
         token chars:escape { \\ {make '\\'}}
@@ -154,11 +154,14 @@ grammar Value does ForeignGrammar {
     }
 
     token string:sym<'> {
-        <sym> ~ <sym> <foreign-rule: 'string', String>
+        <sym> ~ <sym> <foreign-rule=.String::string>
         { make $<foreign-rule>.ast }
     }
     token string:sym<'''> {
-        [<sym>\n?] ~ <sym> <foreign-rule: 'string', state$= String but Multi>
+        [<sym>\n?] ~ <sym>
+        <foreign-rule: 'string', state$= String but role :: does Multi {
+                token stopper { "'''" }
+        }>
         { make $<foreign-rule>.ast }
     }
     token string:sym<"> {

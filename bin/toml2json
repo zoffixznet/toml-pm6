@@ -4,6 +4,4 @@ use TOML;
 use JSON::Tiny;
 
 my $*JSON_COMPAT = True;
-my $input = $*IN.slurp-rest.&from-toml
-    or die "Couldn't parse TOML";
-say to-json($input);
+$*IN.slurp-rest.&from-toml.&to-json.say;
