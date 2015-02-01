@@ -7,21 +7,31 @@ sub from-toml($text) is export {
 
 sub quot-maybe(Str $_) { m/<-[A..Za..z0..9_-]>/ ?? .perl !! $_ }
 
-sub to-toml(%t, :$prev-keys = '') is export {
+proto to-toml(|) is export {*}
+multi to-toml(%t, :$prev-keys = '') {
     if %t == 0 {
         "";
     } else {
         my @after;
         join "\n", (%t{*}:kv).map(-> $key, $val {
             my $fullname = $prev-keys ~ quot-maybe $key;
-            if $val ~~ Associative or $val ~~ Positional {
+            if $val ~~ Associative {
                 push @after, "["~$fullname~"]\n" ~ to-toml $val, prev-keys => $fullname ~ '.';
+                next;
+            } elsif $val ~~ Positional {
+                push @after, to-toml $val, prev-keys => $fullname;
                 next;
             } else {
                 quot-maybe($key) ~ " = " ~ to-toml-val($val);
             }
         }), @after;
     }
+}
+multi to-toml(@t, :$prev-keys = '') {
+    join "\n", @t.map({
+        die "TOML arrays may only be of a single type" unless $_ ~~ Associative;
+        "[["~$prev-keys~"]]\n" ~ to-toml($_, :prev-keys($prev-keys~'.'))
+    })
 }
 
 proto to-toml-val(|) is export(:ALL) {*}
