@@ -1,6 +1,6 @@
 ## TOML.pm6
 
-A WIP <200 line TOML decoder written in Perl 6.
+A WIP ~200 line TOML parser and serializer written in Perl 6.
 
 ### Synopsis
 
