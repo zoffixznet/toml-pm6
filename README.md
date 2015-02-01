@@ -1,6 +1,6 @@
 ## TOML.pm6
 
-A WIP ~200 line TOML parser and serializer written in Perl 6.
+A WIP ~250 line TOML parser and serializer written in Perl 6.
 
 ### Synopsis
 
@@ -36,4 +36,3 @@ And then test TOML.pm6 with:
  * TOML encoding
  * Perl 6 test harness
  * Better errors
- * Pass toml-test

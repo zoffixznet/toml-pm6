@@ -4,31 +4,43 @@ grammar Value {...}
 
 token ws { [<[\ \t]>|'#'\N*]* }
 
-role AoH {
-    method at_key($key) is rw { self[*-1]{$key} }
+class AoH is Array {
+    method at_key    ($key)          is rw { self[*-1]{$key} }
     method assign_key($key, \assign) is rw { self[*-1]{$key} = assign }
+    method bind_key  ($key, \bind)   is rw { self[*-1]{$key} := bind }
 }
 
 rule TOP {
     :my %top;
-    :my %*array_names;
+    # The semantics of when it's ok and not okay to used some keyname are
+    # rather complicated.
+    # For example, "[a.b]\nc = 42" prevents [a.b.c] from being used, but
+    # "[a.b.c]\n[a]" is legal.
+    :my Bool %used_names;
+    # Array-tables depend on redeclaration, so we have to watch them too
+    :my Bool %array_names;
     ^ \n *
     [[
     | <keyvalue> { given @<keyvalue>[*-1].ast {
-        die "Name {.key.join('.')} already in use." if [||] %top{.key}:exists;
-        %top{.key} = .value;
+        die "Name {.key.join('.')} already in use." if %used_names{~.key}++;
+        %top{.key} := .value;
     } }
     | <table> { given @<table>[*-1].ast {
-        die "Name {.key.join('.')} already in use." if [||] %top{.key}:exists;
-        %top{.key} = .value;
+        die "Name {.key.join('.')} already in use." if %used_names{~.key}++;
+        # Implicit declarations mean that %top{.key} might already be defined,
+        # so we include that in the new hash
+        %top{.key} := $%(%top{.key}.map({.pairs}), .value.pairs);
+        # All of the new sub-keys are considered used in addition to .key
+        for .value.keys { %used_names{.key~" $^subkey"}++ };
     } }
     | <table_array> { given @<table_array>[*-1].ast {
-        my $already_array = [||] %*array_names{.key};
-        die "Name {.key.join('.')} already used as a table."
-            if [||](%top{.key}:exists) and not $already_array;
-        ([||] %top{.key}) || %top{.key} = [] but AoH;
-        %top{.key,}[0].push: .value;
-        %*array_names{.key} = True;
+        if not %array_names{~.key}++ {
+            die "Name {.key.join('.')} is not a table-array."
+                if %used_names{~.key}++ or %top{.key,}.flat[0];
+        }
+        # Just pushing to an AoH will sometimes make a normal Array instead of
+        # an AoH, so we just make a new AoH each time (for now)
+        %top{.key} := AoH.new(|@(%top{.key,}.flat[0]), .value).item;
     } }
     ] \n * ]*
     [ $ || { die "Couldn't parse TOML: $/" } ]
@@ -37,9 +49,7 @@ rule TOP {
 
 token key {
     [ <[A..Za..z0..9_-]>+ | <?before \"<-["]> ><str=.Value::string> ]
-    {
-        make $<str> ?? $<str>.ast !! $/.Str;
-    }
+    { make $<str> ?? $<str>.ast !! ~$/ }
 }
 
 token value {
@@ -52,7 +62,7 @@ rule keyvalue {
 }
 
 rule table {
-    '[' ~ ']' <key>+ % \. \n
+    '[' ~ ']' <key>+ % \. \n?
     <keyvalue> *
     {
         my %table;
@@ -73,7 +83,14 @@ rule table_array {
 
 grammar Value does ForeignGrammar {
     token ws { [\n|' '|\t|'#'\N*]* }
+    sub process-val($type, $value) {
+        state $stringify-types = <datetime bool integer float>.Set;
+        $*JSON_COMPAT
+            ?? { type => $type, value => $type (elem) $stringify-types ?? ~$value !! $value.ast }
+            !! $value.ast
+    }
     rule value {
+        # Could perhaps be simplified with :dba?
         [
         | <integer>
         | <float>
@@ -83,20 +100,30 @@ grammar Value does ForeignGrammar {
         | <string>
         ]
         {
-            my ($k, $v) = %().kv;
-            if $*JSON_COMPAT {
-                make { type => $k, value => $k (elem) <datetime bool integer float> ?? ~$v !! $v.ast };
-            } else {
-                make $v.ast;
-            }
+            make process-val(|%().kv);
         }
     }
 
     token integer { <[+-]>? \d+ { make +$/ } }
     token float { <[+-]>? \d+ [\.\d+]? [<[Ee]> <integer>]? { make +$/ }}
     rule array {
-        \[ ~ \] <value> * %% \,
-        { make my@ = @<value>».ast }
+        # Arrays are only allowed to contain a single type
+        :my $type;
+        :my $values;
+        \[ ~ \] [
+          (
+          | <integer>  * %% \,
+          | <float>    * %% \,
+          | <array>    * %% \,
+          | <bool>     * %% \,
+          | <datetime> * %% \,
+          | <string>   * %% \,
+          )
+          { ($type, $values) = %0.pairs.first({.value}).kv }
+          [ <value> { die "Can't use value of type "~ %<value>.keys[0].tc ~" in an array of type "~$type.tc }
+          ]?
+        ]
+        { make map {process-val($type, $_)}, @$values }
     }
     token bool {
         | true { make True }
